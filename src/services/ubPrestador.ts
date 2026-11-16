@@ -107,12 +107,28 @@ export async function registrarChamadoAPI(dados: AtendimentoPayload): Promise<At
   }
 }
 
+export interface EnderecoItem {
+  display_name: string
+  endereco_principal: string
+  endereco_secundario: string
+  principal: string
+  secundario: string
+  cidade?: string
+  estado?: string
+  cep?: string
+  is_cep?: boolean
+  lat?: number
+  lng?: number
+  tipo?: string
+}
+
 /**
- * Busca inteligente de endereços com ViaCEP + Photon Geocoder direto no navegador + Fallback Cloud
+ * Busca inteligente de endereços com ViaCEP + Photon Geocoder direto no navegador + Fallback
+ * Padrão idêntico ao Projeto UB Prestador / GK Prestador (SEM &lang=pt para evitar HTTP 400!)
  */
-export async function buscarEnderecos(query: string) {
-  if (!query || query.trim().length < 3) return []
-  const q = query.trim()
+export async function buscarEnderecosInteligente(termo: string, estado: string = '', cidade: string = ''): Promise<EnderecoItem[]> {
+  if (!termo || termo.trim().length < 3) return []
+  const q = termo.trim()
 
   // 1. Se for CEP (8 dígitos)
   const cepDigits = q.replace(/\D/g, '')
@@ -124,35 +140,59 @@ export async function buscarEnderecos(query: string) {
         if (!data.erro) {
           const logradouro = data.logradouro || ''
           const bairro = data.bairro || ''
-          const cidade = data.localidade || ''
+          const city = data.localidade || ''
           const uf = data.uf || ''
           const principal = logradouro || `CEP ${data.cep}`
-          const secundario = bairro ? `${bairro}, ${cidade} - ${uf}` : `${cidade} - ${uf}`
+          const secundario = bairro ? `${bairro}, ${city} - ${uf}` : `${city} - ${uf}`
           return [{
             display_name: `${principal} - ${secundario}`,
             endereco_principal: principal,
             endereco_secundario: secundario,
-            cidade: cidade,
+            principal: principal,
+            secundario: secundario,
+            cidade: city,
             estado: uf,
+            cep: data.cep,
+            is_cep: true,
             lat: -23.6914,
-            lng: -46.5646
+            lng: -46.5646,
+            tipo: "cep"
           }]
         }
       }
     } catch (e) {}
   }
 
-  // 2. Photon Geocoder (OpenStreetMap / Komoot com HTTPS nativo)
+  // 2. Extrai número predial se presente (ex: 'Rua Maria Adelaide 776' -> 776)
+  const numMatch = q.match(/\b(\d+)\b/)
+  const housenumber = numMatch ? numMatch[1] : ''
+  const qSemNum = housenumber ? q.replace(new RegExp(`\\b${housenumber}\\b`, 'g'), '').replace(/\s+/g, ' ').trim() : q
+
+  // Detecta se há sigla de UF no texto digitado (ex: SP, MG, RJ, etc.)
+  const ufsRegex = /\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/i
+  const ufDigitadaMatch = q.match(ufsRegex)
+  const ufEfetiva = estado || (ufDigitadaMatch ? ufDigitadaMatch[1].toUpperCase() : 'SP')
+
+  // 3. Busca por logradouro/bairro via Photon Geocoder (SEM &lang=pt que quebra a API com HTTP 400!)
   try {
-    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lang=pt`
+    const queryParts = [qSemNum || q]
+    if (cidade) queryParts.push(cidade)
+    else if (!q.toLowerCase().includes('são bernardo') && !q.toLowerCase().includes('sbc') && !q.toLowerCase().includes('santo andré') && !q.toLowerCase().includes('sp')) {
+      queryParts.push('São Bernardo do Campo')
+    }
+    if (ufEfetiva) queryParts.push(ufEfetiva)
+    queryParts.push('Brasil')
+    const fullQuery = queryParts.join(', ')
+
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(fullQuery)}&limit=8`
     const res = await fetch(url)
     if (res.ok) {
       const data = await res.json()
       if (data.features && data.features.length > 0) {
         return data.features.map((f: any) => {
           const p = f.properties || {}
-          const street = p.street || p.name || q
-          const num = p.housenumber ? `, ${p.housenumber}` : ''
+          const street = p.street || p.name || qSemNum
+          const num = housenumber ? `, ${housenumber}` : (p.housenumber ? `, ${p.housenumber}` : '')
           const district = p.district || p.locality || ''
           const city = p.city || p.town || ''
           const state = p.state || ''
@@ -165,30 +205,122 @@ export async function buscarEnderecos(query: string) {
             display_name: secundario ? `${principal}, ${secundario}` : principal,
             endereco_principal: principal,
             endereco_secundario: secundario,
+            principal: principal,
+            secundario: secundario,
             cidade: city,
             estado: state,
             lat: coords[1],
-            lng: coords[0]
+            lng: coords[0],
+            tipo: "rua"
+          }
+        })
+      }
+    }
+  } catch (e) {
+    console.error("Erro na busca Photon com filtro:", e)
+  }
+
+  // Se a busca com filtro não retornou resultados, busca direta
+  try {
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8`
+    const res = await fetch(url)
+    if (res.ok) {
+      const data = await res.json()
+      if (data.features && data.features.length > 0) {
+        return data.features.map((f: any) => {
+          const p = f.properties || {}
+          const street = p.street || p.name || q
+          const num = housenumber ? `, ${housenumber}` : (p.housenumber ? `, ${p.housenumber}` : '')
+          const district = p.district || p.locality || ''
+          const city = p.city || p.town || ''
+          const state = p.state || ''
+          const coords = f.geometry && f.geometry.coordinates ? f.geometry.coordinates : [-46.5646, -23.6914]
+
+          const principal = `${street}${num}`
+          const secundario = [district, city, state].filter(Boolean).join(' - ')
+
+          return {
+            display_name: secundario ? `${principal}, ${secundario}` : principal,
+            endereco_principal: principal,
+            endereco_secundario: secundario,
+            principal: principal,
+            secundario: secundario,
+            cidade: city,
+            estado: state,
+            lat: coords[1],
+            lng: coords[0],
+            tipo: "rua"
           }
         })
       }
     }
   } catch (e) {}
 
-  // 3. Fallback na API da Hostinger
-  try {
-    const res = await fetch(`${CLOUD_API_BASE}/busca-endereco?q=${encodeURIComponent(q)}`)
-    if (res.ok) {
-      return await res.json()
-    }
-  } catch (e) {}
-
   // 4. Fallback padrão da Grande São Paulo / ABC
+  const suf = [cidade || 'São Bernardo do Campo', ufEfetiva || 'SP'].filter(Boolean).join(' - ')
   return [
-    { display_name: `${q}, São Bernardo do Campo - SP`, endereco_principal: q, endereco_secundario: "São Bernardo do Campo - SP", lat: -23.6914, lng: -46.5646 },
-    { display_name: `${q}, Santo André - SP`, endereco_principal: q, endereco_secundario: "Santo André - SP", lat: -23.6639, lng: -46.5383 },
-    { display_name: `${q}, São Paulo - SP`, endereco_principal: q, endereco_secundario: "São Paulo - SP", lat: -23.5505, lng: -46.6333 }
+    { 
+      display_name: `${q}, ${suf}`, 
+      endereco_principal: q, 
+      endereco_secundario: suf, 
+      principal: q,
+      secundario: suf,
+      cidade: cidade || 'São Bernardo do Campo',
+      estado: ufEfetiva || 'SP',
+      lat: -23.6914, 
+      lng: -46.5646 
+    }
   ]
+}
+
+export const buscarEnderecos = buscarEnderecosInteligente
+
+/**
+ * Geocodificação reversa de GPS para detectar rua e número exatos via Photon
+ */
+export async function geocodificarReverso(lat: number, lng: number): Promise<EnderecoItem> {
+  try {
+    const res = await fetch(`https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}`)
+    if (res.ok) {
+      const data = await res.json()
+      if (data.features && data.features.length > 0) {
+        const p = data.features[0].properties || {}
+        const street = p.street || p.name || ''
+        const num = p.housenumber ? `, ${p.housenumber}` : ''
+        const district = p.district || p.locality || ''
+        const city = p.city || p.town || ''
+        const state = p.state || ''
+        const principal = street ? `${street}${num}` : (district || city || 'Localização GPS')
+        const sec = [district, city, state].filter(Boolean).join(', ')
+        const full = sec ? `${principal} - ${sec}` : principal
+
+        return {
+          display_name: full,
+          endereco_principal: principal,
+          endereco_secundario: sec,
+          principal,
+          secundario: sec,
+          cidade: city,
+          estado: state,
+          lat,
+          lng
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Erro na geocodificação reversa:", e)
+  }
+
+  const coordsStr = `GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)} (São Bernardo do Campo - SP)`
+  return {
+    display_name: coordsStr,
+    endereco_principal: coordsStr,
+    endereco_secundario: "Coordenadas GPS",
+    principal: coordsStr,
+    secundario: "Coordenadas GPS",
+    lat,
+    lng
+  }
 }
 
 /**

@@ -6,10 +6,10 @@ import {
 } from "lucide-react"
 import { COMPANY, trackContact } from "../data/company"
 import { 
-  buscarEnderecos, 
   buscarClientePorTelefone,
   registrarChamadoAPI
 } from "../services/ubPrestador"
+import { EnderecoAutocomplete } from "./EnderecoAutocomplete"
 
 const TIPOS_SERVICO = [
   "REBOQUE LEVE (Passeio / SUV)",
@@ -39,13 +39,11 @@ export const InteractiveCalculator: React.FC = () => {
   const [blindado, setBlindado] = useState<boolean>(false)
   const [tipoServico, setTipoServico] = useState<string>("REBOQUE LEVE (Passeio / SUV)")
 
-  // 3. Itinerário (Origem e Destino)
+  // 3. Itinerário (Origem e Destino) - Campos Obrigatórios
   const [origem, setOrigem] = useState<string>("")
   const [destino, setDestino] = useState<string>("")
-  const [sugestoesOrigem, setSugestoesOrigem] = useState<any[]>([])
-  const [sugestoesDestino, setSugestoesDestino] = useState<any[]>([])
-  const [showSugestoesOrigem, setShowSugestoesOrigem] = useState<boolean>(false)
-  const [showSugestoesDestino, setShowSugestoesDestino] = useState<boolean>(false)
+  const [origemAlert, setOrigemAlert] = useState<boolean>(false)
+  const [destinoAlert, setDestinoAlert] = useState<boolean>(false)
 
   // Estado de envio, aviso de sucesso e feedback visual
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
@@ -54,9 +52,9 @@ export const InteractiveCalculator: React.FC = () => {
   const [erroMsg, setErroMsg] = useState<string | null>(null)
   const [telAlert, setTelAlert] = useState<boolean>(false)
 
-  const timerOrigem = useRef<any>(null)
-  const timerDestino = useRef<any>(null)
   const telInputRef = useRef<HTMLInputElement>(null)
+  const origemInputRef = useRef<HTMLInputElement>(null)
+  const destinoInputRef = useRef<HTMLInputElement>(null)
   const sectionRef = useRef<HTMLElement>(null)
   const rightColumnRef = useRef<HTMLDivElement>(null)
 
@@ -100,62 +98,14 @@ export const InteractiveCalculator: React.FC = () => {
     }
   }
 
-  // Autocomplete de Origem
-  const handleOrigemChange = (texto: string) => {
-    setOrigem(texto)
-    setErroMsg(null)
-    if (timerOrigem.current) clearTimeout(timerOrigem.current)
-    if (texto.trim().length >= 3) {
-      timerOrigem.current = setTimeout(async () => {
-        const dados = await buscarEnderecos(texto)
-        setSugestoesOrigem(dados)
-        setShowSugestoesOrigem(dados.length > 0)
-      }, 350)
-    } else {
-      setSugestoesOrigem([])
-      setShowSugestoesOrigem(false)
-    }
-  }
-
-  // Autocomplete de Destino
-  const handleDestinoChange = (texto: string) => {
-    setDestino(texto)
-    if (timerDestino.current) clearTimeout(timerDestino.current)
-    if (texto.trim().length >= 3) {
-      timerDestino.current = setTimeout(async () => {
-        const dados = await buscarEnderecos(texto)
-        setSugestoesDestino(dados)
-        setShowSugestoesDestino(dados.length > 0)
-      }, 350)
-    } else {
-      setSugestoesDestino([])
-      setShowSugestoesDestino(false)
-    }
-  }
-
-  // Obter localização atual do navegador
-  const capturarLocalizacaoAtual = () => {
-    if (!navigator.geolocation) {
-      setOrigem("São Bernardo do Campo - SP (Localização Central)")
-      return
-    }
-    navigator.geolocation.getCurrentPosition(
-      () => {
-        setOrigem("Minha localização atual em São Bernardo do Campo (GPS Ativo)")
-        setErroMsg(null)
-      },
-      () => {
-        setOrigem("São Bernardo do Campo - SP (Centro / Rodovias)")
-        setErroMsg(null)
-      }
-    )
-  }
-
-  // DISPARO DA SOLICITAÇÃO DIRETO PARA O SISTEMA COM FEEDBACK IMEDIATO
+  // DISPARO DA SOLICITAÇÃO DIRETO PARA O SISTEMA COM VALIDAÇÃO RIGOROSA
   const handleEnviarSolicitacao = async () => {
     setErroMsg(null)
+    setTelAlert(false)
+    setOrigemAlert(false)
+    setDestinoAlert(false)
 
-    // Validação do telefone
+    // 1. Validação do telefone (Obrigatório)
     let rawDigits = telefone.replace(/\D/g, "")
     if (rawDigits.startsWith("55") && rawDigits.length >= 12) {
       rawDigits = rawDigits.slice(2)
@@ -169,10 +119,28 @@ export const InteractiveCalculator: React.FC = () => {
       const msg = "Por favor, informe seu Telefone / WhatsApp com DDD para enviarmos seu orçamento e prévia."
       setErroMsg(msg)
       setTelAlert(true)
-      
-      // Rola a tela suavemente para o campo de telefone e foca
       telInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
       telInputRef.current?.focus()
+      return
+    }
+
+    // 2. Validação OBRIGATÓRIA do Local de Coleta (Origem)
+    if (!origem || origem.trim().length < 4) {
+      const msg = "Por favor, preencha o Local de Coleta (Origem) onde o veículo está."
+      setErroMsg(msg)
+      setOrigemAlert(true)
+      origemInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      origemInputRef.current?.focus()
+      return
+    }
+
+    // 3. Validação OBRIGATÓRIA do Local de Entrega (Destino)
+    if (!destino || destino.trim().length < 4) {
+      const msg = "Por favor, preencha o Local de Entrega (Destino) para onde o veículo será levado."
+      setErroMsg(msg)
+      setDestinoAlert(true)
+      destinoInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      destinoInputRef.current?.focus()
       return
     }
 
@@ -187,8 +155,8 @@ export const InteractiveCalculator: React.FC = () => {
       tipoServico: tipoServico,
       plotadoEnvelopado: plotadoEnvelopado || false,
       blindado: blindado || false,
-      origem: origem.trim() || "São Bernardo do Campo - SP (A confirmar via WhatsApp)",
-      destino: destino.trim() || "A definir com a equipe",
+      origem: origem.trim(),
+      destino: destino.trim(),
       observacoes: empresa ? `Empresa: ${empresa} | Chamado via vitrine oficial rainhadoguincho.com.br` : "Chamado via vitrine oficial rainhadoguincho.com.br"
     }
 
@@ -216,6 +184,8 @@ export const InteractiveCalculator: React.FC = () => {
     setProtocoloGerado(null)
     setErroMsg(null)
     setTelAlert(false)
+    setOrigemAlert(false)
+    setDestinoAlert(false)
   }
 
   // SIMULAÇÃO DE PREENCHIMENTO ALEATÓRIO PARA TESTES
@@ -283,6 +253,8 @@ export const InteractiveCalculator: React.FC = () => {
     setDestino(rand(destinos))
     setErroMsg(null)
     setTelAlert(false)
+    setOrigemAlert(false)
+    setDestinoAlert(false)
   }
 
   return (
@@ -577,111 +549,64 @@ export const InteractiveCalculator: React.FC = () => {
                 </div>
               </div>
 
-              {/* CARD 3: ITINERÁRIO & PREENCHIMENTO INTELIGENTE */}
+              {/* CARD 3: ITINERÁRIO & PREENCHIMENTO INTELIGENTE (GOOGLE MAPS STYLE) */}
               <div className="bg-[#FAF9FD] rounded-2xl p-5 border border-purple-100/80">
                 <div className="flex items-center justify-between mb-3.5 pb-2.5 border-b border-purple-100">
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-[#7B2FBE]" />
                     <h3 className="text-xs font-black uppercase tracking-wider text-[#3A1060]">
-                      3. Itinerário & Preenchimento Inteligente
+                      3. Itinerário & Preenchimento Inteligente (Coleta & Entrega) *
                     </h3>
                   </div>
-                  <span className="text-[10px] text-gray-500 hidden sm:inline">
-                    Busca ruas, números, bairros ou CEP
+                  <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full hidden sm:inline">
+                    Obrigatório • Google Maps Style
                   </span>
                 </div>
 
-                {/* Local de Coleta (Origem) */}
-                <div className="relative mb-3.5">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-bold text-red-600 flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5" /> Local de Coleta (Origem)
-                    </label>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase">ORIGEM</span>
-                  </div>
+                <div className="space-y-4">
+                  {/* Local de Coleta (Origem) - OBRIGATÓRIO */}
+                  <EnderecoAutocomplete
+                    label="Local de Coleta (Origem)"
+                    badgeLabel="ORIGEM"
+                    badgeColor="text-red-700 bg-red-100/70"
+                    iconColor="text-red-600"
+                    value={origem}
+                    onChange={(val) => {
+                      setOrigem(val)
+                      setOrigemAlert(false)
+                      setErroMsg(null)
+                    }}
+                    placeholder="Digite rua, número, bairro, cidade ou CEP de coleta..."
+                    required={true}
+                    hasError={origemAlert}
+                    errorMessage="Por favor, informe o local de coleta onde o veículo está."
+                    inputRef={origemInputRef}
+                    disabled={sucessoEnvio}
+                    cidade="São Bernardo do Campo"
+                    estado="SP"
+                  />
 
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={origem}
-                      onChange={(e) => handleOrigemChange(e.target.value)}
-                      disabled={sucessoEnvio}
-                      placeholder="Digite rua, número, bairro ou CEP (ex: Praça Samuel Sabatini, 50)..."
-                      className="w-full bg-white border border-gray-200 rounded-xl py-2.5 pl-3 pr-10 text-xs sm:text-sm text-gray-900 focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100"
-                    />
-                    <button
-                      type="button"
-                      onClick={capturarLocalizacaoAtual}
-                      title="Usar minha localização atual"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-purple-600 hover:text-purple-800 p-1"
-                    >
-                      <Navigation className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Dropdown de sugestões de Origem */}
-                  {showSugestoesOrigem && (
-                    <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
-                      {sugestoesOrigem.map((item, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            setOrigem(item.display_name)
-                            setShowSugestoesOrigem(false)
-                          }}
-                          className="w-full text-left px-3 py-2 text-xs hover:bg-purple-50 border-b border-gray-100 flex items-center gap-2 cursor-pointer"
-                        >
-                          <MapPin className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />
-                          <span className="truncate">{item.display_name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Local de Entrega (Destino) */}
-                <div className="relative">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-bold text-green-700 flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5" /> Local de Entrega (Destino)
-                    </label>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase">DESTINO</span>
-                  </div>
-
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={destino}
-                      onChange={(e) => handleDestinoChange(e.target.value)}
-                      disabled={sucessoEnvio}
-                      placeholder="Digite oficina, concessionária, rua ou CEP de entrega..."
-                      className="w-full bg-white border border-gray-200 rounded-xl py-2.5 pl-3 pr-10 text-xs sm:text-sm text-gray-900 focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                      <Navigation className="w-4 h-4 text-green-600" />
-                    </div>
-                  </div>
-
-                  {/* Dropdown de sugestões de Destino */}
-                  {showSugestoesDestino && (
-                    <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
-                      {sugestoesDestino.map((item, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            setDestino(item.display_name)
-                            setShowSugestoesDestino(false)
-                          }}
-                          className="w-full text-left px-3 py-2 text-xs hover:bg-green-50 border-b border-gray-100 flex items-center gap-2 cursor-pointer"
-                        >
-                          <MapPin className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
-                          <span className="truncate">{item.display_name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {/* Local de Entrega (Destino) - OBRIGATÓRIO */}
+                  <EnderecoAutocomplete
+                    label="Local de Entrega (Destino)"
+                    badgeLabel="DESTINO"
+                    badgeColor="text-emerald-700 bg-emerald-100/70"
+                    iconColor="text-emerald-700"
+                    value={destino}
+                    onChange={(val) => {
+                      setDestino(val)
+                      setDestinoAlert(false)
+                      setErroMsg(null)
+                    }}
+                    placeholder="Digite oficina, concessionária, rua ou CEP de entrega..."
+                    required={true}
+                    hasError={destinoAlert}
+                    errorMessage="Por favor, informe o local de entrega do veículo."
+                    inputRef={destinoInputRef}
+                    disabled={sucessoEnvio}
+                    cidade="São Bernardo do Campo"
+                    estado="SP"
+                  />
                 </div>
 
                 {/* Botão de envio rápido na coluna da esquerda para mobile */}
