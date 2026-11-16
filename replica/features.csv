@@ -1,0 +1,25 @@
+feature,area,priority,original,clone,notes
+Ligacao direta 1 clique (11) 94518-9393,contact,must,yes,yes,Preservado com layout whitespace-nowrap que nunca quebra
+Botao WhatsApp direto com mensagem pre-preenchida,contact,must,yes,yes,Preservado com parametro de texto original
+Header responsivo com logo oficial,header,must,yes,yes,Inclui o logo mascote autentico em alta resolucao
+Hero com promessa clara de atendimento 24h SBC,hero,must,yes,yes,Design moderno com pilula de status em tempo real e vitrine
+Selos de confianca (Base SBC Preco Antes Cartao 24h),hero,must,yes,yes,Modernizado com icones Lucide
+Grade de Servicos (Carro Moto Pane Acidente),services,must,yes,yes,Layout com cards modernos e sombras suaves
+Chips dos 20 bairros de Sao Bernardo do Campo,coverage,must,yes,yes,Interativo com filtro e selecao rapida
+Destaque para Rodovias (Anchieta Imigrantes Rodoanel),coverage,must,yes,yes,Cards tematicos de rodovias
+Secao 3 Passos Como Funciona,process,must,yes,yes,Numeracao destacada com timeline moderna
+Grid Diferenciais Por que a Rainha,differentials,must,yes,yes,Destaque para base local e orcamento previo
+FAQ com accordion interativo,faq,must,yes,yes,Respostas expansivas suaves
+Banner fixo de contato no mobile,mobile,must,yes,yes,Dois botoes (Ligar e WhatsApp) com alto contraste
+Integracao Google Tag Manager GTM-54LPPZQB,tracking,must,yes,yes,Inserido no index.html
+Integracao Google Ads Tag AW-338555353,tracking,must,yes,yes,Inserido no index.html
+Disparo de evento rdg_contato no dataLayer,tracking,must,yes,yes,Disparado ao clicar em ligar ou whatsapp
+Dados estruturados Schema.org AutomotiveBusiness,seo,must,yes,yes,SEO local para Sao Bernardo do Campo
+Calculadora Interativa de Solicitacao de Guincho,interactive,should,no,yes,Melhoria moderna para gerar mensagem WhatsApp personalizada
+Secao de Avaliacoes do Google (5.0 estrelas),social-proof,should,no,yes,Reflete a presenca organica encontrada no Google
+Indicador de Status do Plantao em Tempo Real,hero,should,no,yes,Badge animado de base operacional
+Dark/Light Purple Modern Palette,design,must,yes,yes,Fidelidade as cores roxo ouro e verde da marca
+Integracao API Atendimentos UB Prestador,integrations,should,no,yes,POST em tempo real para https://ubprestador.universobits.com.br/api/atendimentos
+Disparo Simultaneo API e WhatsApp com Protocolo,integrations,should,no,yes,Alimenta o sistema e abre o WhatsApp com o protocolo gerado
+Rastreamento do Motorista via Link UB Prestador,integrations,should,no,yes,Modal no header com suporte a links como UB-842109
+Vitrine Visual da Frota com Ilustracao Autentica,showcase,should,no,yes,Quadro de vitrine com a frota e equipamentos
